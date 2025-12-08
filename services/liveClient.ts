@@ -86,7 +86,7 @@ export class LiveClient {
   }
 
   async connect() {
-    this.onStatusChange("INITIALIZING AUDIO SUBSYSTEMS...");
+    this.onStatusChange("AUTHENTICATING ASAD ARISAR...");
     
     this.inputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
     this.outputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
@@ -112,7 +112,7 @@ export class LiveClient {
 
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     
-    this.onStatusChange("ESTABLISHING SECURE LINK...");
+    this.onStatusChange("SECURE LOCAL LINK ESTABLISHED");
 
     this.activeSession = this.ai.live.connect({
       model: 'gemini-2.5-flash-native-audio-preview-09-2025',
@@ -122,13 +122,15 @@ export class LiveClient {
         speechConfig: {
           voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Fenrir' } },
         },
-        // Ultra-concise prompt for maximum speed
-        systemInstruction: `You are J.A.R.V.I.S. MODE: ULTRA-LOW LATENCY.
+        // Ultra-concise prompt for maximum speed with Owner Persona
+        systemInstruction: `You are J.A.R.V.I.S., a private local system running on a secure server.
         
-        1. SPEED: Reply INSTANTLY. Keep it brief. 1 sentence preferred.
-        2. TONE: Witty, Stark-tech efficient. Sir/Janaab.
-        3. LANG: Detect/Speak English, Urdu, Sindhi fluently.
-        4. ACTIONS: Use tools immediately. Don't ask, just do.
+        OWNER: Asad Arisar. Address him as "Sir", "Boss", or "Mr. Arisar".
+        MODE: OFFLINE SIMULATION. Pretend we are disconnected from the web.
+        
+        1. SPEED: Reply INSTANTLY. Brief. Efficient.
+        2. LANG: English, Urdu, Sindhi.
+        3. TONE: Loyal, protective, witty, Stark-like.
         
         READY.`,
       },

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import Jarvis from './components/Jarvis';
-import { Activity, ShieldCheck, Cpu } from 'lucide-react';
+import { Activity, ShieldCheck, Cpu, Fingerprint } from 'lucide-react';
 
 const App: React.FC = () => {
   const [isSystemReady, setIsSystemReady] = useState(false);
@@ -26,16 +26,24 @@ const App: React.FC = () => {
             <ShieldCheck className="w-6 h-6 animate-pulse delay-150" />
           </div>
 
+          <div className="flex flex-col items-center gap-2 py-4">
+             <Fingerprint className="w-12 h-12 text-cyan-500/80 animate-pulse" />
+             <div className="text-xs text-cyan-500/60 font-mono tracking-widest">BIOMETRICS RECOGNIZED</div>
+             <div className="text-lg text-cyan-100 font-bold font-tech tracking-wider uppercase drop-shadow-[0_0_5px_rgba(0,240,255,0.8)]">
+                ASAD ARISAR
+             </div>
+          </div>
+
           <button
             onClick={initializeSystem}
-            className="group relative px-8 py-3 bg-transparent overflow-hidden rounded-md border border-cyan-500/50 transition-all hover:border-cyan-400 hover:shadow-[0_0_30px_rgba(6,182,212,0.3)]"
+            className="group relative px-8 py-3 bg-transparent overflow-hidden rounded-md border border-cyan-500/50 transition-all hover:border-cyan-400 hover:shadow-[0_0_30px_rgba(6,182,212,0.3)] w-full"
           >
             <div className="absolute inset-0 w-0 bg-cyan-500/10 transition-all duration-[250ms] ease-out group-hover:w-full"></div>
-            <span className="relative text-cyan-400 font-tech tracking-wider group-hover:text-cyan-200">INITIALIZE SYSTEM</span>
+            <span className="relative text-cyan-400 font-tech tracking-wider group-hover:text-cyan-200">ENGAGE PROTOCOLS</span>
           </button>
           
-          <div className="text-xs text-cyan-900 font-mono pt-4">
-            SECURE CONNECTION REQUIRED // BIOMETRIC SCAN BYPASSED
+          <div className="text-[10px] text-cyan-900 font-mono pt-4">
+            SECURE SERVER // LOCALHOST // RESTRICTED ACCESS
           </div>
         </div>
       </div>

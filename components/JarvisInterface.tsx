@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Mic, MicOff, Power, RefreshCw, Wifi, Activity, Terminal, ExternalLink, Zap, Shield, Thermometer } from 'lucide-react';
+import { Mic, MicOff, Power, RefreshCw, Wifi, Activity, Terminal, ExternalLink, Zap, Shield, Thermometer, UserCheck } from 'lucide-react';
 import { LiveClient } from '../services/liveClient';
 import Reactor from './Reactor';
 import { StatusPanel, Diagnostics } from './StatusPanel';
@@ -112,7 +112,7 @@ const JarvisInterface: React.FC = () => {
       try {
         await clientRef.current?.connect();
         setConnected(true);
-        addLog("ESTABLISHING MAIN FRAME CONNECTION", 'info');
+        addLog("ESTABLISHING SECURE LINK...", 'info');
       } catch (e) {
         setStatus("CONNECTION FAILURE");
         setConnected(false);
@@ -138,8 +138,8 @@ const JarvisInterface: React.FC = () => {
       <header className="flex justify-between items-start mb-6 border-b border-cyan-900/30 pb-4">
         <div className="flex flex-wrap gap-4 md:gap-8">
            <StatusPanel label="Protocol" value="LOW LATENCY" active={true} />
-           <StatusPanel label="Security" value={environment.security} active={connected} />
-           <StatusPanel label="Lang Support" value="ENG | URD | SND" active={connected} />
+           <StatusPanel label="Server" value="LOCAL_SECURE" active={connected} />
+           <StatusPanel label="Owner" value="ASAD ARISAR" active={true} />
            <StatusPanel label="CPU Load" value={`${(12 + reactorLevel * 30).toFixed(1)}%`} active={connected} />
         </div>
         <div className="text-right hidden sm:block">
@@ -240,8 +240,12 @@ const JarvisInterface: React.FC = () => {
                       <span className="text-[10px] text-cyan-600 tracking-widest group-hover:text-cyan-400 transition-colors">LIGHTING</span>
                       <span className="text-md text-cyan-300 font-bold">{environment.lights}</span>
                   </div>
-                  <div className="h-1 w-full bg-cyan-900/30 mt-2 overflow-hidden rounded-full">
-                      <div className="h-full bg-cyan-500/50 w-2/3 animate-[pulse_3s_infinite]" />
+                  <div className="flex justify-between items-center group">
+                      <span className="text-[10px] text-cyan-600 tracking-widest group-hover:text-cyan-400 transition-colors">USER</span>
+                      <div className="flex items-center gap-1">
+                          <UserCheck size={12} className="text-green-500" />
+                          <span className="text-md text-cyan-300 font-bold">ASAD ARISAR</span>
+                      </div>
                   </div>
               </div>
            </div>
@@ -251,7 +255,7 @@ const JarvisInterface: React.FC = () => {
               <div className="text-[10px] text-cyan-600 tracking-[0.2em] mb-2 font-bold uppercase">System Integrity</div>
               <Diagnostics />
               <div className="mt-4 flex justify-end gap-2">
-                <div className="px-2 py-1 bg-cyan-900/30 border border-cyan-700/30 rounded text-[9px] text-cyan-500">NET: 45ms</div>
+                <div className="px-2 py-1 bg-cyan-900/30 border border-cyan-700/30 rounded text-[9px] text-cyan-500">NET: LOCAL</div>
                 <div className="px-2 py-1 bg-cyan-900/30 border border-cyan-700/30 rounded text-[9px] text-cyan-500">MEM: 12TB</div>
               </div>
            </div>
