@@ -2,6 +2,7 @@
   "name": "J.A.R.V.I.S. System",
   "description": "An advanced holographic voice assistant interface powered by Gemini Live API.",
   "requestFramePermissions": [
-    "microphone"
+    "microphone",
+    "camera"
   ]
 }

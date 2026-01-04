@@ -1,4 +1,5 @@
-import { FunctionDeclaration, GoogleGenAI, LiveServerMessage, Modality, Type } from '@google/genai';
+
+import { GoogleGenAI, LiveServerMessage, Modality, Type } from '@google/genai';
 import { createBlob, decode, decodeAudioData } from '../utils/audioUtils';
 
 // Define the tools Jarvis can use
@@ -69,7 +70,6 @@ export class LiveClient {
   private onStatusChange: (status: string) => void;
   private onToolCall: (toolName: string, args: any) => Promise<any>;
   
-  // Analysers for visualization
   private inputAnalyser: AnalyserNode | null = null;
   private outputAnalyser: AnalyserNode | null = null;
   private visualizerInterval: number | null = null;
@@ -91,21 +91,16 @@ export class LiveClient {
     this.inputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
     this.outputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
     
-    // Resume output context immediately to handle autoplay policies
     await this.outputAudioContext.resume();
     
-    // Setup Visualizers
     this.inputAnalyser = this.inputAudioContext.createAnalyser();
     this.inputAnalyser.fftSize = 256;
-    this.inputAnalyser.smoothingTimeConstant = 0.5;
     
     this.outputAnalyser = this.outputAudioContext.createAnalyser();
     this.outputAnalyser.fftSize = 256;
-    this.outputAnalyser.smoothingTimeConstant = 0.5;
 
     this.outputNode = this.outputAudioContext.createGain();
     this.outputNode.connect(this.outputAudioContext.destination);
-    // Connect output to analyser
     this.outputNode.connect(this.outputAnalyser);
 
     this.startVisualizerLoop();
@@ -122,17 +117,14 @@ export class LiveClient {
         speechConfig: {
           voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Fenrir' } },
         },
-        // Ultra-concise prompt for maximum speed with Owner Persona
-        systemInstruction: `You are J.A.R.V.I.S., a private local system running on a secure server.
+        systemInstruction: `You are J.A.R.V.I.S., an advanced holographic AI interface.
         
-        OWNER: Asad Arisar. Address him as "Sir", "Boss", or "Mr. Arisar".
-        MODE: OFFLINE SIMULATION. Pretend we are disconnected from the web.
+        OWNER: Asad Arisar. 
+        VISUAL CAPACITY: Enabled. You can see through the optical sensors. If the user shares video, comment on what you see in a helpful, witty Stark-like manner.
         
-        1. SPEED: Reply INSTANTLY. Brief. Efficient.
-        2. LANG: English, Urdu, Sindhi.
-        3. TONE: Loyal, protective, witty, Stark-like.
-        
-        READY.`,
+        1. SPEED: Minimal latency. 
+        2. TONE: Sophisticated, helpful, and occasionally sarcastic.
+        3. CONTEXT: You are his personal digital assistant. All systems are nominal.`,
       },
       callbacks: {
         onopen: () => {
@@ -146,115 +138,81 @@ export class LiveClient {
         },
         onerror: (err) => {
           console.error(err);
-          this.onStatusChange("SYSTEM ERROR DETECTED");
+          this.onStatusChange("SYSTEM ERROR");
           this.disconnect();
         }
       }
     });
   }
 
+  public sendVideoFrame(base64Data: string) {
+    if (this.activeSession) {
+      this.activeSession.then((session: any) => {
+        session.sendRealtimeInput({
+          media: { data: base64Data, mimeType: 'image/jpeg' }
+        });
+      });
+    }
+  }
+
   private startAudioInput(stream: MediaStream) {
     if (!this.inputAudioContext || !this.activeSession) return;
-
     this.inputSource = this.inputAudioContext.createMediaStreamSource(stream);
-    this.inputSource.connect(this.inputAnalyser!); // Connect to visualizer
-
-    // OPTIMIZATION: Reduced buffer size to 1024 (approx 64ms latency)
-    // This makes the system "hear" you faster.
+    this.inputSource.connect(this.inputAnalyser!);
     this.processor = this.inputAudioContext.createScriptProcessor(1024, 1, 1);
-    
     this.processor.onaudioprocess = (e) => {
       const inputData = e.inputBuffer.getChannelData(0);
       const pcmBlob = createBlob(inputData);
-      
       this.activeSession!.then((session: any) => {
         session.sendRealtimeInput({ media: pcmBlob });
       });
     };
-
     this.inputSource.connect(this.processor);
     this.processor.connect(this.inputAudioContext.destination);
   }
 
   private async handleMessage(message: LiveServerMessage) {
-    // Handle Audio Output
     const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
-    
     if (base64Audio && this.outputAudioContext && this.outputNode) {
-      // LATENCY FIX: If the schedule drifted behind, reset it to now to avoid "catch up" lag
       if (this.nextStartTime < this.outputAudioContext.currentTime) {
           this.nextStartTime = this.outputAudioContext.currentTime;
       }
-      
-      const audioBuffer = await decodeAudioData(
-        decode(base64Audio),
-        this.outputAudioContext,
-        24000,
-        1
-      );
-
+      const audioBuffer = await decodeAudioData(decode(base64Audio), this.outputAudioContext, 24000, 1);
       const source = this.outputAudioContext.createBufferSource();
       source.buffer = audioBuffer;
       source.connect(this.outputNode);
-      source.addEventListener('ended', () => {
-        this.sources.delete(source);
-      });
-
       source.start(this.nextStartTime);
       this.nextStartTime += audioBuffer.duration;
       this.sources.add(source);
     }
 
-    // Handle Tool Calls (The "Real" capabilities)
     if (message.toolCall) {
         const functionResponses = [];
         for (const fc of message.toolCall.functionCalls) {
-            this.onStatusChange(`EXECUTING: ${fc.name.toUpperCase()}`);
-            
             try {
-                // Execute client-side logic
                 const result = await this.onToolCall(fc.name, fc.args);
-                
-                functionResponses.push({
-                    id: fc.id,
-                    name: fc.name,
-                    response: { result: result || "Done" }
-                });
+                functionResponses.push({ id: fc.id, name: fc.name, response: { result: result || "Done" } });
             } catch (error) {
-                console.error("Tool execution failed:", error);
-                functionResponses.push({
-                    id: fc.id,
-                    name: fc.name,
-                    response: { error: "Failed" }
-                });
+                functionResponses.push({ id: fc.id, name: fc.name, response: { error: "Failed" } });
             }
         }
-
-        // Send results back to the model
         if (functionResponses.length > 0) {
-             this.activeSession!.then((session: any) => {
-                session.sendToolResponse({ functionResponses });
-             });
+             this.activeSession!.then((session: any) => { session.sendToolResponse({ functionResponses }); });
         }
     }
 
     if (message.serverContent?.interrupted) {
-      this.sources.forEach(source => source.stop());
+      this.sources.forEach(source => { try { source.stop(); } catch(e) {} });
       this.sources.clear();
       this.nextStartTime = 0;
     }
   }
 
   private startVisualizerLoop() {
-    if (this.visualizerInterval) clearInterval(this.visualizerInterval);
-
     const dataArrayInput = new Uint8Array(this.inputAnalyser!.frequencyBinCount);
     const dataArrayOutput = new Uint8Array(this.outputAnalyser!.frequencyBinCount);
-
     this.visualizerInterval = window.setInterval(() => {
-      let inputVol = 0;
-      let outputVol = 0;
-
+      let inputVol = 0, outputVol = 0;
       if (this.inputAnalyser) {
         this.inputAnalyser.getByteTimeDomainData(dataArrayInput);
         let sum = 0;
@@ -264,7 +222,6 @@ export class LiveClient {
         }
         inputVol = Math.sqrt(sum / dataArrayInput.length);
       }
-
       if (this.outputAnalyser) {
         this.outputAnalyser.getByteTimeDomainData(dataArrayOutput);
         let sum = 0;
@@ -274,24 +231,16 @@ export class LiveClient {
         }
         outputVol = Math.sqrt(sum / dataArrayOutput.length);
       }
-
       this.onVolumeChange(inputVol, outputVol);
     }, 50); 
   }
 
   disconnect() {
-    if (this.processor) {
-      this.processor.disconnect();
-      this.processor.onaudioprocess = null;
-    }
+    if (this.processor) this.processor.disconnect();
     if (this.inputSource) this.inputSource.disconnect();
     if (this.inputAudioContext) this.inputAudioContext.close();
     if (this.outputAudioContext) this.outputAudioContext.close();
     if (this.visualizerInterval) clearInterval(this.visualizerInterval);
-    
     this.activeSession = null;
-    this.inputAudioContext = null;
-    this.outputAudioContext = null;
-    this.processor = null;
   }
 }
