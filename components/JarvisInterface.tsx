@@ -1,251 +1,303 @@
 
-import React, { useEffect, useRef, useState } from 'react';
-import { Mic, MicOff, Power, RefreshCw, Wifi, Activity, Terminal, ExternalLink, Zap, Shield, Thermometer, UserCheck, Camera, CameraOff, Scan, Eye } from 'lucide-react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { Terminal, Cpu, Activity, Search, Shield, Zap, MessageSquare, Globe, Radar, BarChart3, Wifi } from 'lucide-react';
+import { GoogleGenAI } from '@google/genai';
 import { LiveClient } from '../services/liveClient';
 import Reactor from './Reactor';
 import { StatusPanel, Diagnostics } from './StatusPanel';
-import CameraFeed from './CameraFeed';
+import HolographicWindow from './HolographicWindow';
 import { LogEntry } from '../types';
+
+interface AppWindow {
+  id: string;
+  title: string;
+  type: string;
+  content?: any;
+}
 
 const JarvisInterface: React.FC = () => {
   const [connected, setConnected] = useState(false);
-  const [cameraActive, setCameraActive] = useState(false);
-  const [status, setStatus] = useState("SYSTEM STANDBY");
+  const [status, setStatus] = useState("DORMANT");
   const [volume, setVolume] = useState({ input: 0, output: 0 });
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [pendingLaunch, setPendingLaunch] = useState<{name: string, url: string} | null>(null);
-  const [environment, setEnvironment] = useState({ temperature: 72, lights: 'ACTIVE', security: 'MAXIMUM' });
+  const [windows, setWindows] = useState<AppWindow[]>([]);
+  const [transcription, setTranscription] = useState<{text: string, isUser: boolean} | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
   
-  const logsEndRef = useRef<HTMLDivElement>(null);
   const clientRef = useRef<LiveClient | null>(null);
 
-  const addLog = (message: string, type: 'info' | 'success' | 'warning' = 'info') => {
-    setLogs(prev => [...prev.slice(-15), { timestamp: new Date(), message, type }]);
+  const addLog = useCallback((message: string, type: 'info' | 'success' | 'warning' = 'info') => {
+    setLogs(prev => [...prev.slice(-8), { timestamp: new Date(), message: message.toUpperCase(), type }]);
+  }, []);
+
+  const performSearch = async (query: string) => {
+    setIsSearching(true);
+    addLog(`INITIATING GLOBAL SEARCH: ${query}`, 'info');
+    
+    const id = Date.now().toString();
+    const newWindow: AppWindow = { id, title: `RESULT: ${query.slice(0, 15)}`, type: 'SEARCH', content: { text: "Accessing Global Matrix satellite uplink...", sources: [] } };
+    setWindows(prev => [newWindow, ...prev]);
+
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: query,
+        config: {
+          tools: [{ googleSearch: {} }],
+        },
+      });
+
+      const text = response.text || "Database returned null.";
+      const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks?.map((chunk: any) => ({
+        title: chunk.web?.title || "Data Node",
+        uri: chunk.web?.uri || "#"
+      })) || [];
+
+      setWindows(prev => prev.map(w => w.id === id ? { ...w, content: { text, sources } } : w));
+      addLog(`SEARCH COMPLETE`, 'success');
+    } catch (error) {
+      console.error("Search failed:", error);
+      setWindows(prev => prev.map(w => w.id === id ? { ...w, content: { text: "ACCESS DENIED: Satellite link interrupted.", sources: [] } } : w));
+      addLog(`SEARCH FAILED`, 'warning');
+    } finally {
+      setIsSearching(false);
+    }
   };
 
-  useEffect(() => {
-    if (logsEndRef.current) {
-        logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [logs]);
-
   const handleToolExecution = async (toolName: string, args: any) => {
-    addLog(`PROTOCOL INITIATED: ${toolName.toUpperCase()}`, 'info');
-    
-    if (toolName === 'open_application') {
-        const appName = args.appName.toLowerCase();
-        let url = '';
-        if (appName.includes('google')) url = 'https://www.google.com';
-        else if (appName.includes('youtube')) url = 'https://www.youtube.com';
-        else if (appName.includes('spotify')) url = 'https://open.spotify.com';
-        else if (appName.includes('github')) url = 'https://github.com';
-        
-        if (url) {
-            window.open(url, '_blank');
-            addLog(`LAUNCHING: ${appName.toUpperCase()}`, 'success');
-            return "Application launched.";
-        }
-        return "Target not found in memory banks.";
+    if (toolName === 'type_text') {
+      try { await navigator.clipboard.writeText(args.content); } catch (e) {}
+      addLog(`BUFFER SYNCED TO CLIPBOARD`, 'success');
+      return "Clipboard updated, Sir.";
     }
 
-    if (toolName === 'run_diagnostics') {
-        addLog(`SCANNING ${args.system.toUpperCase()}...`, 'info');
-        return `Diagnostic complete for ${args.system}. All systems nominal.`;
+    if (toolName === 'launch_app') {
+      const id = Date.now().toString();
+      const appName = args.app_id.toUpperCase();
+      let type = 'TERMINAL';
+      
+      if (appName.includes('SECURITY')) type = 'SECURITY';
+      else if (appName.includes('MAP')) type = 'MAPS';
+      else if (appName.includes('HEALTH') || appName.includes('VITAL')) type = 'HEALTH';
+      else if (appName.includes('WEATHER')) type = 'SEARCH'; // Reuse search for weather
+
+      setWindows(prev => [{ id, title: appName, type }, ...prev].slice(0, 4));
+      addLog(`MODULE ${appName} DEPLOYED`, 'success');
+      return `Very good, Sir. The ${appName} interface is live.`;
     }
 
-    if (toolName === 'set_environment') {
-        setEnvironment(prev => ({ ...prev, [args.parameter]: args.value }));
-        addLog(`ENV ADJUSTED: ${args.parameter.toUpperCase()}`, 'success');
-        return "Adjustment successful.";
+    if (toolName === 'web_search') {
+      performSearch(args.query);
+      return "Searching the global matrix now. One moment, Sir.";
     }
 
-    return "Protocol executed.";
+    return "Awaiting next command.";
   };
 
   useEffect(() => {
     clientRef.current = new LiveClient(
       (input, output) => setVolume({ input, output }),
       (statusUpdate) => setStatus(statusUpdate),
+      (text, isUser) => setTranscription({ text, isUser }),
       handleToolExecution
     );
 
-    return () => {
-      if (clientRef.current) {
-        clientRef.current.disconnect();
-      }
-    };
-  }, []);
+    return () => clientRef.current?.disconnect();
+  }, [addLog]);
 
   const toggleConnection = async () => {
     if (connected) {
       clientRef.current?.disconnect();
       setConnected(false);
-      setStatus("SYSTEM STANDBY");
-      addLog("SESSION TERMINATED", 'warning');
+      setStatus("DORMANT");
+      setWindows([]);
+      setTranscription(null);
     } else {
       try {
         await clientRef.current?.connect();
         setConnected(true);
-        addLog("ESTABLISHING SECURE LINK...", 'info');
+        addLog("SYSTEM BOOT SEQUENCE COMPLETE", "success");
       } catch (e) {
-        setStatus("CONNECTION FAILURE");
+        setStatus("BOOT ERROR");
         setConnected(false);
-        addLog("ERROR: CHECK NETWORK PROTOCOLS", 'warning');
       }
     }
   };
 
-  const toggleCamera = () => {
-    const newState = !cameraActive;
-    setCameraActive(newState);
-    addLog(newState ? "OPTICAL SENSORS ACTIVE" : "SENSORS STANDBY", newState ? 'success' : 'warning');
-  };
-
-  const handleFrameCapture = (base64: string) => {
-    if (connected && clientRef.current) {
-      clientRef.current.sendVideoFrame(base64);
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      performSearch(searchQuery);
+      setSearchQuery("");
     }
   };
 
-  const reactorLevel = Math.max(volume.input, volume.output);
-
   return (
-    <div className="relative z-10 w-full max-w-7xl mx-auto h-screen p-4 md:p-6 flex flex-col font-tech">
-      {/* Header */}
-      <header className="flex justify-between items-start mb-6 border-b border-cyan-900/30 pb-4">
-        <div className="flex flex-wrap gap-4 md:gap-8">
-           <StatusPanel label="Protocol" value="EYE_LINK" active={cameraActive} />
-           <StatusPanel label="User" value="ASAD ARISAR" active={true} />
-           <StatusPanel label="Optics" value={cameraActive ? "STREAMING" : "OFFLINE"} active={cameraActive} />
+    <div className="relative z-10 w-full max-w-full mx-auto h-screen p-6 flex flex-col font-tech select-none overflow-hidden">
+      {/* Corner Brackets Decorations */}
+      <div className="absolute top-8 left-8 w-12 h-12 border-t-2 border-l-2 border-cyan-500/30"></div>
+      <div className="absolute top-8 right-8 w-12 h-12 border-t-2 border-r-2 border-cyan-500/30"></div>
+      <div className="absolute bottom-8 left-8 w-12 h-12 border-b-2 border-l-2 border-cyan-500/30"></div>
+      <div className="absolute bottom-8 right-8 w-12 h-12 border-b-2 border-r-2 border-cyan-500/30"></div>
+
+      <header className="flex justify-between items-start mb-6 border-b border-cyan-500/20 pb-4">
+        <div className="flex gap-6">
+           <StatusPanel label="SYSTEM" value="V2.5" active={connected} />
+           <StatusPanel label="USER" value="ASAD" active={true} />
+           <div className="hidden lg:flex flex-col border-l-2 border-cyan-500/30 pl-3 py-1">
+              <span className="text-[10px] tracking-widest text-cyan-600 font-bold uppercase">LINK STATUS</span>
+              <div className="flex items-center gap-1">
+                 <Wifi size={12} className={connected ? "text-cyan-400" : "text-cyan-900"} />
+                 <span className="text-xs text-cyan-500/60 uppercase">Encrypted</span>
+              </div>
+           </div>
         </div>
+
+        <form onSubmit={handleSearchSubmit} className="flex-1 max-w-xl mx-8 relative">
+          <input 
+            type="text" 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="ACCESS GLOBAL MATRIX DATABASE..."
+            className="w-full bg-cyan-950/10 border border-cyan-500/20 rounded-none py-2 px-10 text-xs text-cyan-400 placeholder:text-cyan-900 focus:outline-none focus:border-cyan-400/50 focus:bg-cyan-950/20 transition-all uppercase tracking-widest font-tech"
+          />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-cyan-700" size={14} />
+          {isSearching && (
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 flex gap-1">
+              {[0, 1, 2].map(i => (
+                <div key={i} className="w-1 h-3 bg-cyan-500 animate-pulse" style={{ animationDelay: `${i * 100}ms` }} />
+              ))}
+            </div>
+          )}
+        </form>
+
         <div className="text-right">
-           <h2 className="text-4xl font-bold text-cyan-500 hologram-glow tracking-tighter">J.A.R.V.I.S.</h2>
-           <div className="text-[8px] text-cyan-700 tracking-[0.5em] mt-1 uppercase">Tactical Intelligence Interface</div>
+           <h2 className="text-3xl font-black text-cyan-400 hologram-glow uppercase tracking-tighter leading-none">J.A.R.V.I.S.</h2>
+           <div className="text-[8px] text-cyan-600 tracking-[0.4em] uppercase font-bold mt-1">Matrix v2.5 // Stark Ind.</div>
         </div>
       </header>
 
-      <main className="flex-1 flex flex-col md:flex-row items-center justify-center relative gap-8 w-full">
-        
-        {/* Left: Tactical Section */}
-        <div className="hidden md:flex flex-col w-80 h-full justify-center gap-6">
+      <main className="flex-1 relative flex">
+        {/* Left HUD Panel */}
+        <aside className="w-48 hidden xl:flex flex-col gap-8 py-10 opacity-60">
            <div className="space-y-4">
-              <div className="flex items-center justify-between px-2 border-b border-cyan-900/30 pb-2">
-                <div className="flex items-center gap-2">
-                  <Eye size={14} className={cameraActive ? "text-cyan-400" : "text-cyan-900"} />
-                  <span className="text-[10px] tracking-widest text-cyan-600 font-bold uppercase">Optical Interface</span>
-                </div>
-                <div className="flex gap-2">
-                  <button 
-                    onClick={toggleCamera}
-                    className={`px-3 py-1 text-[10px] border transition-all rounded-sm font-bold ${cameraActive ? 'bg-cyan-500/20 border-cyan-400 text-cyan-300' : 'bg-black border-cyan-900 text-cyan-900'}`}
-                  >
-                    {cameraActive ? 'DEACTIVATE' : 'ENGAGE'}
-                  </button>
-                </div>
+              <div className="text-[10px] text-cyan-700 font-bold uppercase tracking-[0.2em] flex items-center gap-2">
+                <Radar size={12} /> SCANNING...
               </div>
-              <CameraFeed isActive={cameraActive} onFrameCapture={handleFrameCapture} />
-              
-              <div className="flex flex-wrap gap-2">
-                <div className={`flex-1 p-2 border border-cyan-800/30 bg-black/40 rounded text-center transition-opacity ${cameraActive ? 'opacity-100' : 'opacity-20'}`}>
-                   <div className="text-[8px] text-cyan-600 mb-1">FPS</div>
-                   <div className="text-xs text-cyan-300">60.0</div>
-                </div>
-                <div className={`flex-1 p-2 border border-cyan-800/30 bg-black/40 rounded text-center transition-opacity ${cameraActive ? 'opacity-100' : 'opacity-20'}`}>
-                   <div className="text-[8px] text-cyan-600 mb-1">RESOL</div>
-                   <div className="text-xs text-cyan-300">HD</div>
-                </div>
-                <div className={`flex-1 p-2 border border-cyan-800/30 bg-black/40 rounded text-center transition-opacity ${cameraActive ? 'opacity-100' : 'opacity-20'}`}>
-                   <div className="text-[8px] text-cyan-600 mb-1">LATENCY</div>
-                   <div className="text-xs text-cyan-300">12MS</div>
-                </div>
-              </div>
-           </div>
-
-           {/* Logs */}
-           <div className="border border-cyan-800/30 bg-black/60 p-4 rounded-lg h-48 flex flex-col box-glow">
-              <div className="flex items-center gap-2 text-cyan-500 mb-2 border-b border-cyan-800/50 pb-2">
-                 <Terminal size={14} />
-                 <span className="text-[10px] tracking-[0.2em] font-bold">EVENT_STREAM</span>
-              </div>
-              <div className="flex-1 overflow-y-auto font-mono text-[9px] space-y-1 scrollbar-hide">
-                 {logs.map((log, i) => (
-                    <div key={i} className={`opacity-80 ${log.type === 'success' ? 'text-green-400' : log.type === 'warning' ? 'text-orange-400' : 'text-cyan-300'}`}>
-                       <span className="opacity-30 mr-2">>></span> {log.message}
-                    </div>
-                 ))}
-                 <div ref={logsEndRef} />
-              </div>
-           </div>
-        </div>
-
-        {/* Center: Core Reactor */}
-        <div className="flex-1 flex flex-col items-center justify-center relative min-h-[400px]">
-          <div className="relative transform transition-transform duration-100" style={{ transform: `scale(${1 + reactorLevel * 0.15})` }}>
-            <Reactor isActive={connected} outputLevel={volume.output} inputLevel={volume.input} />
-          </div>
-
-          <div className="absolute bottom-4 w-full text-center">
-            <div className="inline-block bg-black/80 backdrop-blur-md border border-cyan-800/50 px-12 py-3 rounded-full box-glow shadow-[0_0_50px_rgba(0,240,255,0.05)]">
-               <span className="font-mono text-cyan-300 tracking-[0.4em] text-xs animate-pulse uppercase flex items-center gap-4">
-                 <div className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-cyan-400' : 'bg-red-500'} animate-ping`} />
-                 {status}
-               </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Right: Environment & Monitoring */}
-        <div className="hidden md:flex flex-col w-80 h-full justify-center gap-6 text-right">
-           <div className="border border-cyan-800/30 bg-black/60 p-4 rounded-lg box-glow">
-              <div className="flex items-center justify-end gap-2 text-cyan-500 mb-4 border-b border-cyan-800/50 pb-2">
-                 <span className="text-[10px] tracking-[0.2em] font-bold">SUBSYSTEM_MONITOR</span>
-                 <Zap size={14} />
-              </div>
-              <div className="space-y-4">
-                  <div className="flex justify-between items-center group">
-                      <span className="text-[10px] text-cyan-600 tracking-widest uppercase">Reactor Temp</span>
-                      <span className="text-xl text-cyan-300">{environment.temperature}°C</span>
-                  </div>
-                  <div className="flex justify-between items-center group">
-                      <span className="text-[10px] text-cyan-600 tracking-widest uppercase">Grid Load</span>
-                      <span className="text-xl text-cyan-300">42%</span>
-                  </div>
-                  <div className="flex justify-between items-center group">
-                      <span className="text-[10px] text-cyan-600 tracking-widest uppercase">Optical Sync</span>
-                      <span className={`text-sm font-bold ${cameraActive ? 'text-green-400' : 'text-cyan-800'}`}>
-                        {cameraActive ? 'SYNCHRONIZED' : 'DORMANT'}
-                      </span>
-                  </div>
+              <div className="h-20 border border-cyan-500/10 bg-cyan-950/5 relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-t from-cyan-500/10 to-transparent animate-pulse" />
+                <div className="absolute top-0 left-0 w-full h-0.5 bg-cyan-400/50 animate-[scan_2s_linear_infinite]" />
               </div>
            </div>
            
-           <div>
-              <div className="text-[10px] text-cyan-600 tracking-[0.2em] mb-2 font-bold uppercase">Neuro-Link Waveform</div>
+           <div className="space-y-4">
+              <div className="text-[10px] text-cyan-700 font-bold uppercase tracking-[0.2em] flex items-center gap-2">
+                <BarChart3 size={12} /> SYSTEM LOAD
+              </div>
               <Diagnostics />
            </div>
+        </aside>
+
+        <div className="flex-1 flex flex-col items-center justify-center relative">
+          {connected && transcription && (
+            <div className="absolute top-0 w-full max-w-2xl text-center z-30 pointer-events-none">
+              <div className="inline-flex items-start gap-3 bg-black/60 border border-cyan-500/20 px-8 py-4 rounded-none backdrop-blur-xl shadow-[0_0_30px_rgba(0,240,255,0.1)]">
+                <MessageSquare size={16} className={transcription.isUser ? "text-cyan-600 mt-1" : "text-cyan-400 mt-1 animate-pulse"} />
+                <div className="flex flex-col items-start text-left">
+                  <span className="text-[9px] uppercase tracking-widest text-cyan-600 font-bold mb-1">
+                    {transcription.isUser ? "USER IDENTIFIED" : "JARVIS_VOICE_OUT"}
+                  </span>
+                  <p className="text-cyan-100 text-sm font-medium leading-relaxed max-w-lg">
+                    {transcription.text}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="cursor-pointer relative z-20 group" onClick={toggleConnection}>
+            <Reactor isActive={connected} outputLevel={volume.output} inputLevel={volume.input} />
+            {!connected && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                 <div className="bg-black/80 border border-cyan-500/30 px-8 py-3 font-bold text-cyan-400 text-sm animate-pulse tracking-[0.3em] uppercase group-hover:bg-cyan-500 group-hover:text-black transition-all">
+                   INITIATE
+                 </div>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-12 flex flex-col items-center gap-4">
+             <div className="inline-flex items-center gap-4 bg-cyan-950/20 border border-cyan-500/10 px-6 py-2 backdrop-blur-sm">
+                <div className={`w-2 h-2 rounded-full ${connected ? 'bg-cyan-400 shadow-[0_0_10px_#00f0ff]' : 'bg-red-800 animate-pulse'}`} />
+                <span className="text-cyan-400 tracking-[0.3em] text-[10px] uppercase font-bold">{status}</span>
+             </div>
+             {connected && (
+               <div className="flex gap-2">
+                 <div className="text-[10px] text-cyan-800 uppercase animate-pulse">Neural Link: 98%</div>
+                 <div className="text-[10px] text-cyan-800 uppercase animate-pulse delay-500">Biometric: Sync</div>
+               </div>
+             )}
+          </div>
         </div>
 
+        {/* Right HUD Panel */}
+        <aside className="w-48 hidden xl:flex flex-col items-end gap-8 py-10 opacity-60">
+           <div className="space-y-4 w-full">
+              <div className="text-[10px] text-cyan-700 font-bold uppercase tracking-[0.2em] flex items-center justify-end gap-2">
+                ACTIVE PROTOCOLS <Activity size={12} />
+              </div>
+              <div className="space-y-1">
+                {['MARK_42', 'HOUSE_PARTY', 'VERONICA'].map(p => (
+                   <div key={p} className="text-[9px] text-cyan-900 border-r border-cyan-900/50 pr-2 text-right hover:text-cyan-500 cursor-help transition-colors">{p} // STANDBY</div>
+                ))}
+              </div>
+           </div>
+        </aside>
+
+        <div className="absolute inset-0 pointer-events-none overflow-visible">
+          {windows.map((win, idx) => (
+            <div key={win.id} className="absolute pointer-events-auto transition-all duration-500" style={{ left: 10 + (idx * 30), top: 80 + (idx * 25) }}>
+              <HolographicWindow 
+                id={win.id} 
+                title={win.title} 
+                type={win.type} 
+                content={win.content} 
+                onClose={() => setWindows(prev => prev.filter(w => w.id !== win.id))} 
+              />
+            </div>
+          ))}
+        </div>
       </main>
 
-      {/* Controls */}
-      <footer className="mt-auto flex justify-center items-center gap-10 relative py-10">
-        <div className="absolute top-0 w-1/4 left-0 h-px bg-gradient-to-r from-transparent to-cyan-900/50"></div>
-        <div className="absolute top-0 w-1/4 right-0 h-px bg-gradient-to-l from-transparent to-cyan-900/50"></div>
-        
-        <button 
-          onClick={toggleConnection}
-          className={`
-            relative group flex items-center justify-center w-28 h-28 rounded-full border-2 transition-all duration-700
-            ${connected 
-              ? 'border-red-500/50 hover:border-red-400 hover:shadow-[0_0_60px_rgba(239,68,68,0.3)] bg-red-950/20' 
-              : 'border-cyan-500/50 hover:border-cyan-400 hover:shadow-[0_0_60px_rgba(6,182,212,0.3)] bg-cyan-950/20'}
-          `}
-        >
-          <div className={`absolute inset-[-6px] rounded-full border border-dashed border-cyan-500/20 ${connected ? 'animate-spin' : ''} duration-[15s]`}></div>
-          <div className="absolute inset-2 rounded-full border border-white/5"></div>
-          {connected ? <Power className="w-10 h-10 text-red-400" /> : <Mic className="w-10 h-10 text-cyan-400" />}
-        </button>
+      <footer className="h-24 flex items-end justify-between border-t border-cyan-500/10 mt-6 pt-4">
+         <div className="flex-1 overflow-hidden relative group">
+           <div className="absolute left-0 top-0 text-[8px] text-cyan-700/50 uppercase tracking-widest font-bold mb-2">Internal Log Stream</div>
+           <div className="flex flex-col-reverse h-16 pt-4 overflow-hidden">
+             {logs.map((log, i) => (
+               <div key={i} className={`text-[10px] font-mono tracking-wider mb-0.5 ${log.type === 'success' ? 'text-cyan-400' : log.type === 'warning' ? 'text-red-500' : 'text-cyan-800'}`}>
+                 [{log.timestamp.toLocaleTimeString()}] >> {log.message}
+               </div>
+             ))}
+           </div>
+         </div>
+         <div className="flex flex-col items-end">
+            <div className="flex gap-4 mb-2">
+              <Cpu size={14} className="text-cyan-900" />
+              <Shield size={14} className="text-cyan-900" />
+              <Terminal size={14} className="text-cyan-900" />
+            </div>
+            <div className="text-[10px] text-cyan-900 tracking-[0.5em] uppercase font-bold">STARK INDUSTRIES // {new Date().getFullYear()}</div>
+         </div>
       </footer>
+
+      <style>{`
+        @keyframes scan {
+          0% { transform: translateY(0); }
+          100% { transform: translateY(80px); }
+        }
+      `}</style>
     </div>
   );
 };

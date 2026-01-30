@@ -1,3 +1,4 @@
+
 import { Blob } from "@google/genai";
 
 export function decode(base64: string): Uint8Array {
@@ -38,16 +39,16 @@ export async function decodeAudioData(
   return buffer;
 }
 
+// Fix: Updated createBlob to use standard PCM encoding as recommended in the @google/genai documentation
 export function createBlob(data: Float32Array): Blob {
   const l = data.length;
   const int16 = new Int16Array(l);
   for (let i = 0; i < l; i++) {
-    // Clamp values to [-1, 1] to avoid distortion
-    const s = Math.max(-1, Math.min(1, data[i]));
-    int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+    int16[i] = data[i] * 32768;
   }
   return {
     data: encode(new Uint8Array(int16.buffer)),
+    // The supported audio MIME type is 'audio/pcm'.
     mimeType: 'audio/pcm;rate=16000',
   };
 }

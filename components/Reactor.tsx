@@ -1,52 +1,76 @@
-import React from 'react';
+
+import React, { memo } from 'react';
 
 interface ReactorProps {
   isActive: boolean;
-  outputLevel: number; // 0 to 1
-  inputLevel: number; // 0 to 1
+  outputLevel: number;
+  inputLevel: number;
 }
 
-const Reactor: React.FC<ReactorProps> = ({ isActive, outputLevel, inputLevel }) => {
-  // Enhance the visual impact of the audio levels
-  const activeScale = 1 + (outputLevel * 0.5) + (inputLevel * 0.2);
-  const glowIntensity = 0.5 + (outputLevel * 1.5) + (inputLevel * 0.5);
-  
-  return (
-    <div className="relative w-64 h-64 flex items-center justify-center">
-      {/* Outer Ring Static */}
-      <div className={`absolute inset-0 rounded-full border-4 border-cyan-900 opacity-50 ${isActive ? 'animate-[spin_10s_linear_infinite]' : ''}`}></div>
-      
-      {/* Outer Ring Detail */}
-      <div className={`absolute inset-2 rounded-full border-2 border-dashed border-cyan-700 opacity-60 ${isActive ? 'animate-[spin_15s_linear_infinite_reverse]' : ''}`}></div>
+const Reactor: React.FC<ReactorProps> = memo(({ isActive, outputLevel, inputLevel }) => {
+  const intensity = isActive ? 0.3 + (outputLevel * 0.7) + (inputLevel * 0.2) : 0.05;
+  const scale = 1 + (outputLevel * 0.15);
+  const rotation = isActive ? 'animate-[spin_10s_linear_infinite]' : '';
 
-      {/* Middle Rotating Segment */}
-      <div className="absolute inset-8 rounded-full border border-cyan-500/30"></div>
+  return (
+    <div className="relative w-72 h-72 flex items-center justify-center transition-transform duration-300" style={{ transform: `scale(${scale})` }}>
+      {/* Outer Static Frame */}
+      <div className="absolute inset-0 rounded-full border border-cyan-500/5 shadow-[inset_0_0_30px_rgba(0,240,255,0.02)]"></div>
       
-      {/* The Core */}
+      {/* Orbiting Tech Rings */}
+      <div className={`absolute inset-4 rounded-full border-t border-b border-cyan-400/20 ${rotation}`} />
+      <div className={`absolute inset-8 rounded-full border-l border-r border-cyan-500/10 animate-[spin_15s_linear_infinite_reverse]`} />
+      
+      {/* Pulsing Core Glow */}
       <div 
-        className="absolute inset-0 rounded-full transition-all duration-75 ease-out"
+        className="absolute w-40 h-40 rounded-full transition-all duration-150 blur-2xl"
         style={{
-          background: `radial-gradient(circle, rgba(200,255,255,${glowIntensity}) 0%, rgba(0,240,255,${glowIntensity * 0.6}) 40%, rgba(0,0,0,0) 70%)`,
-          transform: `scale(${isActive ? activeScale : 1})`,
-          opacity: isActive ? 1 : 0.3
+          background: `radial-gradient(circle, rgba(0,240,255,${intensity}) 0%, transparent 70%)`,
+          opacity: isActive ? 1 : 0.1
         }}
       ></div>
 
-      {/* Core Structure */}
-      <div className="absolute w-24 h-24 rounded-full border-4 border-white/80 shadow-[0_0_20px_#00f0ff] z-10 flex items-center justify-center bg-cyan-400/10 backdrop-blur-sm">
-         <div className="w-16 h-16 rounded-full border-2 border-cyan-200 opacity-80"></div>
-      </div>
-      
-      {/* Triangle Geometry Overlay */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <svg className="w-full h-full p-6 animate-[spin_20s_linear_infinite]" viewBox="0 0 100 100">
-           <polygon points="50,10 90,90 10,90" fill="none" stroke="rgba(0,240,255,0.3)" strokeWidth="0.5" />
-           <polygon points="50,90 90,10 10,10" fill="none" stroke="rgba(0,240,255,0.3)" strokeWidth="0.5" />
-        </svg>
+      {/* Center Core Structure */}
+      <div className={`relative w-28 h-28 rounded-full border-2 border-cyan-400/40 flex items-center justify-center bg-cyan-950/10 backdrop-blur-md shadow-[0_0_40px_rgba(0,240,255,0.1)] overflow-hidden ${!isActive ? 'grayscale opacity-20' : ''}`}>
+        {/* Reactor Fins */}
+        {[...Array(12)].map((_, i) => (
+          <div 
+            key={i} 
+            className="absolute w-1 h-8 bg-cyan-400/20" 
+            style={{ 
+              transform: `rotate(${i * 30}deg) translateY(-20px)`,
+              opacity: isActive ? 0.8 : 0.1
+            }} 
+          />
+        ))}
+        
+        {/* The Central Light Source */}
+        <div className={`w-14 h-14 rounded-full transition-all duration-300 ${isActive ? 'bg-cyan-100 shadow-[0_0_50px_#00f0ff,0_0_100px_rgba(0,240,255,0.5)]' : 'bg-cyan-900/40'}`}>
+           <div className="w-full h-full rounded-full border-4 border-white/20 animate-pulse" />
+        </div>
       </div>
 
+      {/* Tech Elements Visualizer */}
+      <svg className="absolute inset-0 w-full h-full opacity-40" viewBox="0 0 100 100">
+        <circle cx="50" cy="50" r="48" fill="none" stroke="currentColor" strokeWidth="0.5" strokeDasharray="4 8" className="text-cyan-500" />
+        {isActive && (
+          <>
+            <circle 
+              cx="50" cy="50" 
+              r={40 + outputLevel * 5} 
+              fill="none" stroke="currentColor" 
+              strokeWidth="0.5" 
+              className="text-cyan-300 transition-all duration-75" 
+            />
+            <path 
+              d="M50,10 L50,15 M90,50 L85,50 M50,90 L50,85 M10,50 L15,50" 
+              stroke="#00f0ff" strokeWidth="1" 
+            />
+          </>
+        )}
+      </svg>
     </div>
   );
-};
+});
 
 export default Reactor;

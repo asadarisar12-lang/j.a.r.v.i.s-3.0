@@ -1,8 +1,7 @@
 {
-  "name": "J.A.R.V.I.S. System",
-  "description": "An advanced holographic voice assistant interface powered by Gemini Live API.",
+  "name": "jarvis-matrix-v2",
+  "description": "Optimized J.A.R.V.I.S. interface using Gemini Live API with real-time transcription and simplified HUD.",
   "requestFramePermissions": [
-    "microphone",
-    "camera"
+    "microphone"
   ]
 }
